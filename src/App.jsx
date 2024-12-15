@@ -56,18 +56,50 @@ const useStorageState = (key, initialState) => {
 const getSumComments = stories => {
   return stories.data.reduce((result, value) => result + value.num_comments, 0)
 }
+
+const extractSearchTerm = url => url.replace(API_ENDPOINT, "")
+const getLastSearches = urls =>
+  urls
+    .reduce((result, url, index) => {
+      const searchTerm = extractSearchTerm(url)
+      if (index === 0) {
+        return result.concat(searchTerm)
+      }
+
+      const previousSearchTerm = result[result.length - 1]
+
+      if (searchTerm === previousSearchTerm) {
+        return result
+      } else {
+        return result.concat(searchTerm)
+      }
+    }, [])
+    .slice(-6)
+    .slice(0, -1)
+    .map(extractSearchTerm)
+const getUrl = searchTerm => `${API_ENDPOINT}${searchTerm}`
+
 const App = () => {
   // you can do something inbetween
   const [searchTerm, setSearchTerm] = useStorageState("search", "React")
-  const [url, setUrl] = useState(`${API_ENDPOINT}${searchTerm}`)
+  const [urls, setUrls] = useState([getUrl(searchTerm)])
   const [stories, dispatchStories] = useReducer(storiesReducer, { data: [], isLoading: false, isError: false })
+
+  const handleSearch = searchTerm => {
+    // do something
+    const url = getUrl(searchTerm)
+    setUrls(urls.concat(url))
+  }
+
+  const lastSearches = getLastSearches(urls)
 
   const sumComments = getSumComments(stories)
   //Memoization using useCallback
   const handleFetchStories = useCallback(async () => {
     dispatchStories({ type: "STORIES_FETCH_INIT" })
     try {
-      const result = await axios.get(url)
+      const lastUrl = urls[urls.length - 1]
+      const result = await axios.get(lastUrl)
 
       dispatchStories({
         type: "STORIES_FETCH_SUCCESS",
@@ -76,7 +108,7 @@ const App = () => {
     } catch {
       dispatchStories({ type: "STORIES_FETCH_FAILURE" })
     }
-  }, [url])
+  }, [urls])
 
   useEffect(() => {
     handleFetchStories()
@@ -94,19 +126,34 @@ const App = () => {
   }
 
   const handleSearchSubmit = event => {
-    setUrl(`${API_ENDPOINT}${searchTerm}`)
+    handleSearch(searchTerm)
     event.preventDefault()
+  }
+  const handleLastSearch = searchTerm => {
+    setSearchTerm(searchTerm)
+    handleSearch(searchTerm)
   }
 
   return (
     <>
       <h1>{`My ${title} with ${sumComments} comments.`}</h1>
       <SearchForm searchTerm={searchTerm} onSearchInput={handleSearchInput} onSearchSubmit={handleSearchSubmit} />
+      <LastSearches lastSearches={lastSearches} onLastSearch={handleLastSearch} />
       {stories.isError && <p>Something went wrong...</p>}
       {stories.isLoading ? <p>Loading ...</p> : <List list={stories.data} onRemoveItem={handleRemoveStory} />}
     </>
   )
 }
+
+const LastSearches = ({ lastSearches, onLastSearch }) => (
+  <>
+    {lastSearches.map((searchTerm, index) => (
+      <button key={searchTerm + index} type="button" onClick={() => onLastSearch(searchTerm)}>
+        {searchTerm}
+      </button>
+    ))}
+  </>
+)
 
 const SearchForm = ({ searchTerm, onSearchInput, onSearchSubmit }) => {
   return (
